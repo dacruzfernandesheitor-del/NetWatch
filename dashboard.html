@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetWatch — Monitoramento local</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b1020; --panel: #131a2b; --inset: #101625; --line: #253149;
+  --text: #eef1fc; --muted: #a2aec7; --positive: #64e1ae; --negative: #ff8a96;
+  --pending: #f2cb77; --violet: #b9aaff; --sans: Inter, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--sans); }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; }
+[hidden] { display: none !important; }
+.top {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  padding: 16px max(24px, calc((100vw - 1392px)/2)); border-bottom: 1px solid var(--line);
+  background: #101625; min-height: 70px;
+}
+.brand { display: flex; align-items: center; gap: 12px; white-space: nowrap; font-size: 21px; font-weight: 750; letter-spacing: -.04em; }
+.mark {
+  position: relative; width: 35px; height: 35px; border-radius: 10px;
+  border: 1px solid #6759a8; background: #292348;
+}
+.mark::before { content: ""; position: absolute; inset: 8px; border: 1.5px solid var(--violet); border-radius: 50%; }
+.mark::after { content: ""; position: absolute; inset: 14px; background: var(--violet); border-radius: 50%; }
+.tools { display: flex; align-items: center; justify-content: flex-end; gap: 14px; flex-wrap: wrap; }
+.connection { color: var(--muted); font-size: 12px; }
+.connection[data-state="ok"]::before { content: ""; display: inline-block; margin: 0 7px 2px 0; width: 6px; height: 6px; border-radius: 50%; background: var(--positive); }
+.connection[data-state="error"] { color: var(--negative); }
+.refresh { background: #24203b; color: #e1d9ff; border: 1px solid #514575; border-radius: 8px; padding: 7px 12px; }
+.refresh:hover { background: #352b56; }
+.layout { width: min(1392px, calc(100% - 48px)); margin: 28px auto; display: grid; grid-template-columns: 276px minmax(0, 1fr); gap: 22px; align-items: start; }
+.sidebar, .card { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.sidebar { padding: 17px 13px 13px; }
+.controls { grid-column: 1 / -1; padding: 17px 20px 15px; }
+.control-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.control-form label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+.target-input { flex: 1 1 220px; }
+.port-input { flex: 0 1 142px; }
+.control-form input {
+  width: 100%; min-width: 0; height: 38px; padding: 8px 11px;
+  background: var(--inset); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+}
+.control-form input::placeholder { color: var(--muted); }
+.control-form input:disabled { opacity: .65; }
+.control-form button { height: 38px; padding: 7px 15px; font-weight: 650; border-radius: 8px; }
+.control-form button:disabled { opacity: .52; cursor: default; }
+.start { background: #71e3b1; color: #09241e; border: 1px solid #71e3b1; }
+.start:hover:enabled { background: #a3f7d0; }
+.stop { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.stop:hover:enabled { background: #202a40; }
+.session { margin-top: 9px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.session[data-state="erro"], .session[data-state="limite"] { color: var(--negative); }
+.side-title { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; padding: 0 5px; }
+h1, h2, p { margin: 0; }
+h2 { font-size: 16px; font-weight: 650; letter-spacing: -.016em; }
+.side-title span, .small { color: var(--muted); font-size: 12px; }
+.search { background: var(--inset); color: var(--text); border: 1px solid var(--line); border-radius: 8px; width: 100%; padding: 9px 11px; margin: 13px 0 10px; }
+.search::placeholder { color: var(--muted); }
+.monitor-list { display: grid; gap: 5px; }
+.monitor {
+  width: 100%; text-align: left; display: grid; grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center; column-gap: 10px; padding: 10px 9px;
+  background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 9px;
+}
+.monitor:hover { background: #192238; }
+.monitor[aria-pressed="true"] { background: #262141; border-color: #574980; }
+.monitor strong, .monitor-name { overflow-wrap: anywhere; min-width: 0; }
+.monitor strong { display: block; font-size: 13px; font-weight: 650; }
+.monitor small { color: var(--muted); font: 11px var(--mono); }
+.monitor .percent { background: #111727; border-radius: 6px; color: var(--muted); font: 11px var(--mono); padding: 4px 5px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.good { color: var(--positive); } .bad { color: var(--negative); } .warn { color: var(--pending); }
+.main { display: grid; gap: 16px; min-width: 0; }
+.overview { padding: 23px 24px 21px; background: linear-gradient(115deg, #211c38 0%, #161c30 57%, #131a2b 100%); }
+.overview-head { display: flex; justify-content: space-between; gap: 13px; align-items: flex-start; }
+.target-meta { color: var(--violet); font: 12px var(--mono); }
+h1 { font-size: clamp(24px, 4vw, 36px); font-weight: 720; letter-spacing: -.05em; margin: 4px 0 2px; overflow-wrap: anywhere; }
+.current { display: flex; align-items: center; gap: 7px; border: 1px solid currentColor; border-radius: 80px; padding: 6px 11px; font-size: 12px; font-weight: 650; white-space: nowrap; background: #111727; }
+.timeline { display: flex; height: 25px; gap: 4px; margin: 18px 0 7px; }
+.bar { min-width: 0; flex: 1; border-radius: 3px; background: currentColor; }
+.bar.none { background: #29334a; }
+.timeline-label { display: flex; justify-content: space-between; gap: 10px; }
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.metric { padding: 15px 17px; }
+.metric span { color: var(--muted); font-size: 12px; display: block; }
+.metric strong { display: block; font: 25px/1.3 var(--mono); font-weight: 650; letter-spacing: -.045em; margin-top: 5px; }
+.chart, .recent, .empty { padding: 18px 21px; }
+.card-head { display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: 4px 14px; }
+canvas { width: 100%; height: 190px; display: block; margin-top: 9px; }
+.chart-empty { color: var(--muted); margin: 20px 0 10px; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; text-align: left; margin-top: 8px; }
+th, td { border-bottom: 1px solid var(--line); padding: 9px 7px; }
+th { color: var(--muted); font-size: 11px; font-weight: 600; }
+td { font-size: 13px; }
+td:first-child, td:last-child { font-family: var(--mono); white-space: nowrap; }
+td .dot { display: inline-block; margin-right: 7px; }
+tr:last-child td { border-bottom: 0; }
+.empty p { color: var(--muted); margin-top: 7px; }
+code { font-family: var(--mono); color: #dacfff; }
+@media (max-width: 790px) {
+  .layout { width: calc(100% - 28px); margin: 14px auto; grid-template-columns: 1fr; gap: 14px; }
+  .top { padding: 13px 14px; }
+  .monitor-list { grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); }
+  .overview, .chart, .recent, .empty { padding: 16px; }
+}
+@media (max-width: 460px) {
+  .overview-head { flex-wrap: wrap; }
+  .metric { padding: 10px 9px; }
+  .metric strong { font-size: 19px; }
+  .metrics { gap: 6px; }
+  .timeline { gap: 2px; }
+  .tools { gap: 6px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark" aria-hidden="true"></span>NetWatch</div>
+  <div class="tools">
+    <span id="connection" class="connection" role="status">Lendo histórico…</span>
+    <button id="refresh" class="refresh" type="button">Atualizar</button>
+  </div>
+</header>
+<main class="layout">
+  <section class="card controls" aria-label="Iniciar monitoramento">
+    <form id="monitor-form" class="control-form">
+      <label class="target-input">IP ou hostname
+        <input id="monitor-target" name="destino" placeholder="127.0.0.1" maxlength="254" spellcheck="false" autocomplete="off" required>
+      </label>
+      <label class="port-input">Porta TCP opcional
+        <input id="monitor-port" name="porta" type="number" placeholder="Ping" min="1" max="65535" step="1">
+      </label>
+      <button id="start" class="start" type="submit">Iniciar</button>
+      <button id="stop" class="stop" type="button" disabled>Parar</button>
+    </form>
+    <p id="session" class="session" role="status">Use apenas destinos autorizados.</p>
+  </section>
+  <aside class="sidebar" aria-labelledby="sidebar-title">
+    <div class="side-title"><h2 id="sidebar-title">Monitores</h2><span id="monitor-count">0</span></div>
+    <input id="search" class="search" placeholder="Buscar destino ou porta" type="search" aria-label="Buscar destino ou porta">
+    <div id="monitor-list" class="monitor-list"></div>
+    <p id="no-match" class="small" hidden>Nenhum monitor encontrado.</p>
+  </aside>
+  <section id="empty" class="card empty">
+    <h2 id="empty-title">Carregando o histórico</h2>
+    <p id="empty-help" hidden>Informe um destino no formulário acima para iniciar a primeira verificação.</p>
+  </section>
+  <div id="details" class="main" hidden>
+    <section class="card overview" aria-labelledby="target">
+      <div class="overview-head">
+        <div><div id="target-meta" class="target-meta"></div><h1 id="target"></h1><p id="checked-at" class="small"></p></div>
+        <span id="current" class="current"></span>
+      </div>
+      <div id="timeline" class="timeline" role="img"></div>
+      <div class="timeline-label small"><span>Mais antiga</span><span>Mais recente</span></div>
+    </section>
+    <div class="metrics">
+      <div class="card metric"><span>Taxa de sucesso</span><strong id="rate"></strong></div>
+      <div class="card metric"><span>Tentativas registradas</span><strong id="total"></strong></div>
+      <div class="card metric"><span>Última latência</span><strong id="latency"></strong></div>
+    </div>
+    <section class="card chart" aria-labelledby="chart-title">
+      <div class="card-head"><h2 id="chart-title">Latência do ping</h2><span id="chart-note" class="small"></span></div>
+      <canvas id="chart" role="img" aria-label="Gráfico de latência em milissegundos"></canvas>
+      <p id="chart-empty" class="chart-empty" hidden></p>
+    </section>
+    <section class="card recent" aria-labelledby="recent-title">
+      <div class="card-head"><h2 id="recent-title">Verificações recentes</h2><span class="small">Horário local</span></div>
+      <div class="table-scroll"><table>
+        <thead><tr><th scope="col">Horário</th><th scope="col">Resultado</th><th scope="col">Latência</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+    </section>
+  </div>
+</main>
+<script>
+const el = id => document.getElementById(id);
+const statuses = {
+  respondeu: ["Respondeu ao ping", "good"],
+  conectou: ["Conexão aceita", "good"],
+  sem_resposta: ["Sem resposta", "bad"],
+  conexao_recusada: ["Conexão recusada", "bad"],
+  nome_nao_resolvido: ["Nome não resolvido", "bad"],
+  timeout: ["Tempo limite", "warn"],
+  erro: ["Erro na verificação", "warn"],
+  erro_execucao: ["Erro de execução", "warn"],
+};
+const dateFormat = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit"
+});
+const timeFormat = new Intl.DateTimeFormat("pt-BR", {
+  hour: "2-digit", minute: "2-digit", second: "2-digit"
+});
+const numberFormat = new Intl.NumberFormat("pt-BR");
+const percentFormat = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 1 });
+const key = item => JSON.stringify([item.destino, item.tipo, item.porta]);
+const label = item => item.tipo === "tcp" ? "TCP · porta " + item.porta : "Ping · ICMP";
+const last = item => item.recentes.at(-1);
+const status = check => Object.hasOwn(statuses, check.resultado) ? statuses[check.resultado] : ["Resultado desconhecido", "warn"];
+const percentage = item => percentFormat.format(item.sucessos / item.total);
+const ms = value => value === null ? "—" : numberFormat.format(value) + " ms";
+const formatDate = (value, formatter = dateFormat) => {
+  const date = new Date(value);
+  return Number.isFinite(date.valueOf()) ? formatter.format(date) : "Horário indisponível";
+};
+let monitors = [];
+let selected = null;
+let chartChecks = [];
+let loading = false;
+let changing = false;
+let session = null;
+let requestedMonitor = null;
+
+function text(tag, content, className) {
+  const node = document.createElement(tag);
+  node.textContent = content;
+  if (className) node.className = className;
+  return node;
+}
+
+function renderList() {
+  const query = el("search").value.trim().toLowerCase();
+  const entries = monitors.filter(item => (item.destino + " " + label(item)).toLowerCase().includes(query));
+  el("monitor-count").textContent = numberFormat.format(monitors.length);
+  el("no-match").hidden = !monitors.length || entries.length > 0;
+  const nodes = entries.map(item => {
+    const focusKey = key(item);
+    const button = text("button", "", "monitor");
+    button.type = "button";
+    button.dataset.monitorKey = focusKey;
+    button.setAttribute("aria-pressed", focusKey === selected);
+    const summary = text("span", "", "monitor-name");
+    summary.append(text("strong", item.destino), text("small", label(item)));
+    button.append(text("span", "", "dot " + status(last(item))[1]), summary, text("span", percentage(item), "percent"));
+    button.onclick = () => {
+      requestedMonitor = null;
+      selected = focusKey;
+      renderList();
+      renderDetails();
+    };
+    return button;
+  });
+  const focusKey = document.activeElement?.dataset.monitorKey;
+  el("monitor-list").replaceChildren(...nodes);
+  if (focusKey) nodes.find(node => node.dataset.monitorKey === focusKey)?.focus({ preventScroll: true });
+}
+
+function renderDetails() {
+  const item = monitors.find(candidate => key(candidate) === selected);
+  el("details").hidden = !item;
+  el("empty").hidden = Boolean(item);
+  if (!item) return;
+
+  const check = last(item);
+  const [description, tone] = status(check);
+  el("target").textContent = item.destino;
+  el("target-meta").textContent = label(item);
+  el("checked-at").textContent = "Última verificação em " + formatDate(check.horario);
+  el("current").className = "current " + tone;
+  el("current").replaceChildren(text("span", "", "dot"), document.createTextNode(description));
+  el("rate").textContent = percentage(item);
+  el("total").textContent = numberFormat.format(item.total);
+  el("latency").textContent = ms(check.latencia_ms);
+
+  const recent = item.recentes.slice(-36);
+  const bars = Array.from({ length: 36 - recent.length }, () => text("span", "", "bar none"));
+  recent.forEach(attempt => {
+    const bar = text("span", "", "bar " + status(attempt)[1]);
+    bar.title = formatDate(attempt.horario) + " · " + status(attempt)[0];
+    bars.push(bar);
+  });
+  el("timeline").setAttribute("aria-label", "Últimas " + recent.length + " verificações, da mais antiga à mais recente");
+  el("timeline").replaceChildren(...bars);
+
+  el("rows").replaceChildren(...item.recentes.slice(-8).reverse().map(attempt => {
+    const row = document.createElement("tr");
+    const [title, color] = status(attempt);
+    const result = document.createElement("td");
+    result.append(text("span", "", "dot " + color), document.createTextNode(title));
+    row.append(text("td", formatDate(attempt.horario)), result, text("td", ms(attempt.latencia_ms)));
+    return row;
+  }));
+
+  chartChecks = item.tipo === "ping" ? item.recentes.slice(-60) : [];
+  const measurements = chartChecks.filter(attempt => attempt.latencia_ms !== null).length;
+  el("chart").hidden = measurements === 0;
+  el("chart-empty").hidden = measurements > 0;
+  el("chart-empty").textContent = item.tipo === "tcp"
+    ? "A latência é coletada nas verificações por ping."
+    : "Aguardando um ping com latência registrada.";
+  el("chart-note").textContent = measurements ? measurements + (measurements === 1 ? " medição recente" : " medições recentes") : "";
+  if (measurements) drawChart();
+}
+
+function drawChart() {
+  const canvas = el("chart");
+  if (canvas.hidden || el("details").hidden) return;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const scale = window.devicePixelRatio || 1;
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+
+  const left = 50, top = 13, right = width - 12, bottom = height - 25;
+  const values = chartChecks.map(attempt => attempt.latencia_ms);
+  const step = Math.max(1, Math.ceil(Math.max(...values) / 4));
+  const times = chartChecks.map(attempt => Date.parse(attempt.horario));
+  const duration = times.at(-1) - times[0];
+  const x = index => {
+    if (chartChecks.length === 1) return (left + right) / 2;
+    const ratio = duration > 0 && times.every(Number.isFinite)
+      ? (times[index] - times[0]) / duration
+      : index / (chartChecks.length - 1);
+    return left + (right - left) * ratio;
+  };
+  const y = value => bottom - (bottom - top) * value / (step * 4);
+  ctx.font = "11px Consolas, monospace";
+  ctx.fillStyle = "#a2aec7";
+  ctx.strokeStyle = "#29354d";
+  ctx.lineWidth = 1;
+
+  for (let tick = 0; tick <= 4; tick++) {
+    const level = tick * step;
+    ctx.textAlign = "right";
+    ctx.fillText(level + " ms", left - 7, y(level) + 4);
+    ctx.beginPath();
+    ctx.moveTo(left, y(level));
+    ctx.lineTo(right, y(level));
+    ctx.stroke();
+  }
+  ctx.textAlign = "left";
+  ctx.fillText(formatDate(chartChecks[0].horario, timeFormat), left, height - 6);
+  if (chartChecks.length > 1) {
+    ctx.textAlign = "right";
+    ctx.fillText(formatDate(chartChecks.at(-1).horario, timeFormat), right, height - 6);
+  }
+
+  ctx.strokeStyle = "#71e9bc";
+  ctx.fillStyle = "#71e9bc";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  let previous = null;
+  values.forEach((value, index) => {
+    if (value === null) {
+      previous = null;
+      return;
+    }
+    if (previous === null) ctx.moveTo(x(index), y(value));
+    else ctx.lineTo(x(index), y(value));
+    previous = value;
+  });
+  ctx.stroke();
+
+  values.forEach((value, index) => {
+    if (value === null) return;
+    ctx.beginPath();
+    ctx.arc(x(index), y(value), 2.5, 0, 2 * Math.PI);
+    ctx.fill();
+  });
+  const measurementCount = values.filter(value => value !== null).length;
+  canvas.setAttribute("aria-label", "Latência dos pings, em milissegundos. " + measurementCount + " pontos medidos.");
+}
+
+function renderSession() {
+  const phase = session?.fase;
+  const active = phase === "monitorando" || phase === "parando";
+  el("monitor-target").disabled = active || changing;
+  el("monitor-port").disabled = active || changing;
+  el("start").disabled = active || changing;
+  el("stop").disabled = phase !== "monitorando" || changing;
+}
+
+function applySession(next) {
+  if (!next || (session && next.versao < session.versao)) return;
+  const changed = session?.versao !== next.versao;
+  if (!session && next.fase === "monitorando") {
+    el("monitor-target").value = next.destino;
+    el("monitor-port").value = next.porta ?? "";
+  }
+  session = next;
+  if (changed && next.mensagem) {
+    el("session").dataset.state = next.fase;
+    el("session").textContent = next.mensagem;
+  }
+  renderSession();
+}
+
+async function changeSession(action, payload) {
+  if (changing) return;
+  changing = true;
+  renderSession();
+  try {
+    const response = await fetch("/api/" + action, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    applySession(data.sessao);
+    if (!response.ok) throw new Error(data.erro);
+    if (action === "iniciar" && data.sessao.fase === "monitorando") {
+      requestedMonitor = key({
+        destino: data.sessao.destino,
+        tipo: data.sessao.porta === null ? "ping" : "tcp",
+        porta: data.sessao.porta === null ? "" : String(data.sessao.porta),
+      });
+    }
+    refresh();
+  } catch (error) {
+    el("session").dataset.state = "erro";
+    el("session").textContent = error.message || "Não foi possível enviar a ação ao painel.";
+  } finally {
+    changing = false;
+    renderSession();
+  }
+}
+
+async function refresh() {
+  if (loading) return;
+  loading = true;
+  try {
+    const response = await fetch("/api/historico", { cache: "no-store" });
+    const data = await response.json();
+    applySession(data.sessao);
+    if (!response.ok) throw new Error("Histórico indisponível");
+    monitors = data.monitores;
+    if (requestedMonitor && monitors.some(item => key(item) === requestedMonitor)) {
+      selected = requestedMonitor;
+      requestedMonitor = null;
+      el("search").value = "";
+    }
+    if (!monitors.some(item => key(item) === selected)) selected = monitors.length ? key(monitors[0]) : null;
+    el("connection").dataset.state = "ok";
+    el("connection").textContent = "Atualizado às " + timeFormat.format(new Date());
+    el("empty-title").textContent = "Nenhuma verificação registrada";
+    el("empty-help").hidden = false;
+    renderList();
+    renderDetails();
+  } catch {
+    el("connection").dataset.state = "error";
+    el("connection").textContent = "Falha ao atualizar";
+    if (!monitors.length) {
+      el("empty-title").textContent = "Histórico indisponível";
+      el("empty-help").hidden = true;
+    }
+  } finally {
+    loading = false;
+  }
+}
+
+el("search").addEventListener("input", renderList);
+el("refresh").addEventListener("click", refresh);
+el("monitor-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const port = el("monitor-port").value;
+  changeSession("iniciar", { destino: el("monitor-target").value.trim(), porta: port ? Number(port) : null });
+});
+el("stop").addEventListener("click", () => changeSession("parar", {}));
+new ResizeObserver(drawChart).observe(el("chart"));
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
